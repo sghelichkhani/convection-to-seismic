@@ -7,17 +7,17 @@ submitted as a PBS job on Gadi.
 
 ```
 PVTU simulation output
-        │
-        ▼  01_convert.sh
+        |
+        v  01_convert.sh
 converted.vtu           (Vs, Vp at every mesh node)
-        │
-        ├──▶  02_srts_filter.sh
-        │    converted_srts_filtered.vtu   (Vs filtered through S40/S20/S12RTS)
-        │
-        ├──▶  03_tofi_filter.sh
-        │    converted_tofi_filtered.vtu   (Vs, Vp filtered through LLNL-G3D-JPS)
-        │
-        └──▶  04_interpolate.sh
+        |
+        +--> 02_srts_filter.sh
+        |    converted_srts_filtered.vtu   (Vs filtered through S40/S20/S12RTS)
+        |
+        +--> 03_tofi_filter.sh
+        |    converted_tofi_filtered.vtu   (Vs, Vp filtered through LLNL-G3D-JPS)
+        |
+        +--> 04_interpolate.sh
              converted*.nc                (all three on a regular lon/lat/depth grid)
 ```
 
@@ -38,12 +38,12 @@ pip install -r requirements.txt
 This pulls `srts` from PyPI and installs `gdrift` and `llnltofi` directly from
 their GitHub repositories:
 
-- **srts** — PyPI package for S-RTS tomographic filtering
-- **gdrift** — <https://github.com/g-adopt/g-drift> — thermodynamic conversion tables and anelastic corrections
-- **llnltofi** — <https://github.com/g-adopt/llnltofi> — LLNL-G3D-JPS resolution matrix filtering
+- **srts** - PyPI package for S-RTS tomographic filtering
+- **gdrift** - <https://github.com/g-adopt/g-drift> - thermodynamic conversion tables and anelastic corrections
+- **llnltofi** - <https://github.com/g-adopt/llnltofi> - LLNL-G3D-JPS resolution matrix filtering
 
 On Gadi the packages are already installed under the `xd2` project's shared
-Python path, so you do not need to re-install them — just load the module and
+Python path, so you do not need to re-install them - just load the module and
 run the PBS scripts as described in the usage section below.
 
 ---
@@ -58,16 +58,20 @@ measure in that mantle, that is, we need Vs (shear-wave velocity) and Vp
 (compressional-wave velocity) as a function of temperature and pressure.
 
 **Thermodynamic model.** We use the SLB_21 dataset (Stixrude &
-Lithgow-Bertelloni 2005, updated 2021) with a pyrolite FMAS (FeO–MgO–Al_2O_3-
+Lithgow-Bertelloni 2005, updated 2021) with a pyrolite FMAS (FeO-MgO-Al_2O_3-
 SiO_2) bulk composition.  This is a pre-computed thermodynamic look-up table:
 for each (temperature, depth) pair it gives Vs, Vp, and density, derived from
 mineral-physics equations of state for the stable phase assemblage at those
-conditions.  The table covers the full mantle from 0 to 2891 km. These are coefficients coming from the above study and then thrown into a numerical code that optimises different parameters for mineral assembledge to find what the most stable mineralogy is. Then using theoretical expectations we compute all the thermodynamic parameters. 
+conditions.  The table covers the full mantle from 0 to 2891 km. These are
+coefficients coming from the above study and then thrown into a numerical code
+that optimises different parameters for mineral assemblage to find what the most
+stable mineralogy is. Then using theoretical expectations we compute all the
+thermodynamic parameters.
 
 **Why regularisation?**  Phase transitions (olivine -> wadsleyite -> ringwoodite
 -> post-spinel, etc.) produce sharp velocity jumps in the raw table as a
 function of temperature at a fixed depth.  In a convecting mantle the average
-temperature at any depth is not zero; it follows a geotherm. so a naive
+temperature at any depth is not zero; it follows a geotherm, so a naive
 conversion produces artefacts wherever the laterally-averaged temperature
 crosses a phase boundary.  `regularise_thermodynamic_table` anchors the
 conversion to the actual spherically-averaged temperature profile extracted from
@@ -82,7 +86,7 @@ what you would measure at infinite frequency.  Real seismic waves travel at
 roughly 1 Hz, and at the high temperatures in the deep mantle this matters:
 anelastic attenuation causes velocity dispersion, meaning the actual seismic
 velocity is measurably lower than the elastic one.  The correction follows
-Cammarano et al. (2003) and uses the Q_3 quality-factor profile, which is
+Cammarano et al. (2003) and uses the Q3 quality-factor profile, which is
 calibrated against observed 1-D seismological reference models.  The
 corrected velocity is
 
@@ -111,8 +115,8 @@ distribution of seismic sources and receivers and by the choice of inversion
 regularisation.  Tomographic filtering replicates that effect on the synthetic
 field so that like is compared with like.
 
-The SRTS family: S12RTS (Ritsema et al. 1999), S20RTS (Ritsema et al. 2004),
-S40RTS (Ritsema et al. 2011) -- parameterises Vs anomalies as a sum of spherical
+The SRTS family - S12RTS (Ritsema et al. 1999), S20RTS (Ritsema et al. 2004),
+S40RTS (Ritsema et al. 2011) - parameterises Vs anomalies as a sum of spherical
 harmonics horizontally and 21 splines vertically.  The filtering procedure is:
 
 1. **Mesh -> regular grid (IDW).** The unstructured simulation mesh is
@@ -163,7 +167,7 @@ have recovered had the Earth looked like the simulation.
 
 The filtering steps are:
 
-1. **Mesh → LLNL grid (IDW).** A layer-by-layer IDW maps the simulation Vs and
+1. **Mesh -> LLNL grid (IDW).** A layer-by-layer IDW maps the simulation Vs and
    Vp onto the geographic grid points of the LLNL model.  The LLNL grid
    distinguishes upper-mantle/transition-zone layers from lower-mantle layers,
    each with different horizontal resolutions.
@@ -189,8 +193,8 @@ The output VTU adds `Vs_filtered` and `Vp_filtered`.
 
 The filtered VTU files live on the unstructured finite-element mesh, which is
 convenient for computation but awkward for analysis and plotting.  Step 4 uses
-`ginterp` to resample all three outputs onto a 360 × 181 × 129
-(longitude × latitude × depth) regular grid and writes them as NetCDF files.
+`ginterp` to resample all three outputs onto a 360 x 181 x 129
+(longitude x latitude x depth) regular grid and writes them as NetCDF files.
 These are what you load for making maps, radial profiles, and power spectra.
 
 ---
@@ -215,7 +219,7 @@ cd kat-conversion
 
 Replace `USERNAME` with your Gadi username throughout.
 
-### Step 1 — Convert to seismic velocities
+### Step 1 - Convert to seismic velocities
 
 Edit `01_convert.sh` and set:
 - `INPUT_PVTU` to the path of your simulation's `.pvtu` file
@@ -227,9 +231,9 @@ Then submit:
 qsub 01_convert.sh
 ```
 
-Wall time: ~2–4 h depending on mesh size.  Memory: 128 GB.
+Wall time: ~2-4 h depending on mesh size.  Memory: 128 GB.
 
-### Step 2 — S-RTS filtering
+### Step 2 - S-RTS filtering
 
 Edit `02_srts_filter.sh` and set `INPUT_VTU` to the output of step 1.
 
@@ -240,7 +244,7 @@ qsub 02_srts_filter.sh
 The output is written automatically as `<stem>_srts_filtered.vtu` alongside
 the input.  Wall time: ~1 h.
 
-### Step 3 — LLNL filtering
+### Step 3 - LLNL filtering
 
 Edit `03_tofi_filter.sh` and set `INPUT_VTU` and `OUTPUT_VTU`.
 
@@ -248,9 +252,9 @@ Edit `03_tofi_filter.sh` and set `INPUT_VTU` and `OUTPUT_VTU`.
 qsub 03_tofi_filter.sh
 ```
 
-Wall time: ~1–2 h.
+Wall time: ~1-2 h.
 
-### Step 4 — Interpolate to NetCDF
+### Step 4 - Interpolate to NetCDF
 
 Edit `04_interpolate.sh` and set `WORK_DIR` to the directory containing the
 three VTU files.
@@ -259,7 +263,7 @@ three VTU files.
 qsub 04_interpolate.sh
 ```
 
-Wall time: ~3–4 h.  The output NetCDF files are the primary data products for
+Wall time: ~3-4 h.  The output NetCDF files are the primary data products for
 analysis.
 
 ### Checking job status
@@ -273,7 +277,7 @@ qcat <jobid>               # live output while running
 
 ## Key references
 
-- Stixrude & Lithgow-Bertelloni (2005, 2021) — SLB thermodynamic framework
-- Cammarano et al. (2003) — Anelastic velocity corrections, Q₃ profile
-- Ritsema et al. (1999, 2004, 2011) — S12RTS, S20RTS, S40RTS
-- Simmons et al. (2012, 2019) — LLNL-G3D-JPS and resolution matrix
+- Stixrude & Lithgow-Bertelloni (2005, 2021) - SLB thermodynamic framework
+- Cammarano et al. (2003) - Anelastic velocity corrections, Q3 profile
+- Ritsema et al. (1999, 2004, 2011) - S12RTS, S20RTS, S40RTS
+- Simmons et al. (2012, 2019) - LLNL-G3D-JPS and resolution matrix
