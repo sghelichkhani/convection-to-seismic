@@ -138,10 +138,10 @@ harmonics horizontally and 21 splines vertically.  The filtering procedure is:
    the model's resolution and damps vertical structure that the inversion could
    not constrain.
 
-5. **Synthesis + grid -> mesh (IDW).** The filtered coefficients are synthesised
-   back to the regular grid and then interpolated back to the mesh nodes by
-   IDW.  The depth-layer mean is restored before the final output so that
-   absolute velocities (not just anomalies) are preserved.
+5. **Synthesis + grid -> mesh (layered).** The filtered coefficients are
+   synthesised back to the regular grid and then interpolated back to the mesh
+   nodes layer-by-layer.  The depth-layer mean is restored before the final
+   output so that absolute velocities (not just anomalies) are preserved.
 
 The output VTU adds three fields alongside the original Vs: `Vs_S40RTS`,
 `Vs_S20RTS`, and `Vs_S12RTS`.
@@ -181,9 +181,10 @@ The filtering steps are:
    acts on slowness anomalies irrespective of wave type.
 
 4. **Recover velocity + back-projection.** The filtered slowness anomaly is
-   added back to the 1D reference and converted to velocity.  A 3D
-   inverse-distance-weighted interpolation (k=8 nearest LLNL nodes) maps the
-   result back to the simulation mesh nodes.
+   added back to the 1D reference and converted to velocity.  A layered
+   back-projection (`llnltofi.interpolation.project_from_grid`) maps the
+   result back to the simulation mesh nodes layer-by-layer, mirroring the
+   forward IDW step on the same LLNL layer geometry.
 
 The output VTU adds `Vs_filtered` and `Vp_filtered`.
 
