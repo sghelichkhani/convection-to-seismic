@@ -9,23 +9,22 @@
 #PBS -l wd
 #PBS -j oe
 
-# Step 2: Apply S12RTS / S20RTS / S40RTS tomographic filters to Vs.
+# Step 2: S12/S20/S40 RTS tomographic filtering.
 #
-# INPUT_VTU must point to the output of step 1 (converted.vtu).
-# The script writes <stem>_srts_filtered.vtu alongside the input automatically.
-
-INPUT_VTU=/scratch/xd2/USERNAME/converted.vtu
+# Pass via qsub -v:
+#   NAME  run identifier (required); input is ${WORK}/${NAME}_converted.vtu
 
 set -euo pipefail
 
+: "${NAME:?must pass -v NAME=<run-id>}"
+
+WORK=/scratch/xd2/sg8812/kat-conversion
+INPUT_VTU="${WORK}/${NAME}_converted.vtu"
+
 module use /g/data/fp50/modules
 module load firedrake/main-20260417
-# Prepend a local g-drift checkout if you need the SLB_24 pyroliteCFMASNaCr
-# dataset (not yet in the installed gdrift). Edit the path or drop the entry.
-export PYTHONPATH=/scratch/xd2/USERNAME/g-drift:/scratch/xd2/USERNAME/local/lib/python3.11/site-packages:${PYTHONPATH:-}
+export PYTHONPATH=/scratch/xd2/sg8812/g-drift:/scratch/xd2/sg8812/local/lib/python3.11/site-packages:${PYTHONPATH:-}
 
-SCRIPTS_DIR="$(dirname "$(realpath "$0")")"
-
-echo "[$(date)] Starting S-RTS tomographic filtering"
-python3 "${SCRIPTS_DIR}/srts_filter.py" "${INPUT_VTU}"
+echo "[$(date)] S-RTS filtering ${INPUT_VTU}"
+python3 "${WORK}/srts_filter.py" "${INPUT_VTU}"
 echo "[$(date)] Done."

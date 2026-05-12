@@ -2,24 +2,32 @@
 
 This repository contains the scripts needed to post-process mantle convection
 simulation output into synthetic seismic observables that can be directly
-compared with global tomographic models.  The pipeline has four steps, each
-submitted as a PBS job on Gadi.
+compared with global tomographic models.  The pipeline has five steps (a
+staging step plus four science steps), each submitted as a PBS job on Gadi.
 
 ```
-PVTU simulation output
+simulation output tarball (.tar.gz of *.pvtu pieces)
+        |
+        v  00_stage.sh                       (one-off untar onto /scratch)
+${NAME}_output/output/output_0.pvtu
         |
         v  01_convert.sh
-converted.vtu           (Vs, Vp at every mesh node)
+${NAME}_converted.vtu                        Vs, Vp, dlnVs, dlnVp at every mesh node
         |
         +--> 02_srts_filter.sh
-        |    converted_srts_filtered.vtu   (Vs filtered through S40/S20/S12RTS)
+        |    ${NAME}_converted_srts_filtered.vtu     S40/S20/S12 RTS filtered Vs + dlnVs
         |
         +--> 03_tofi_filter.sh
-        |    converted_tofi_filtered.vtu   (Vs, Vp filtered through LLNL-G3D-JPS)
+        |    ${NAME}_converted_tofi_filtered.vtu     LLNL-G3D-JPS filtered Vs, Vp + dlnVs, dlnVp
         |
         +--> 04_interpolate.sh
-             converted*.nc                (all three on a regular lon/lat/depth grid)
+             ${NAME}_converted*.nc                   all three on a regular lon/lat/depth grid
 ```
+
+Every script is generic on a single run identifier `NAME` passed via
+`qsub -v NAME=...`, so the same pipeline runs against any number of
+simulations side by side without editing source.  Active run names and the
+tarballs they came from are listed in `RUNS.md`.
 
 The science behind each step is explained below, followed by practical
 instructions for running the jobs.
@@ -102,7 +110,23 @@ deep lower mantle where temperatures are high and Q is low.
 **Input / output.**  The script reads one PVTU file (the parallel VTK format
 written by Firedrake/G-ADOPT), dimensionalises coordinates and temperature using
 the constants at the top of `convert_to_vs.py`, and writes a single VTU with
-fields `Temperature_K`, `Vs`, and `Vp` at every mesh node.
+fields `Temperature_K`, `Vs`, `Vp`, `dlnVs`, and `dlnVp` at every mesh node.
+
+The `dlnVs` and `dlnVp` fields are the linearised seismological perturbations
+relative to the depth-mean velocity,
+
+$$
+\delta\ln V \equiv \frac{V - \langle V\rangle(z)}{\langle V\rangle(z)} \times 100\%,
+$$
+
+where $\langle V\rangle(z)$ is the spherical-shell average at the depth of each
+node.  Mesh nodes lie on discrete radial layers, and on the quasi-uniform
+icosahedral horizontal mesh each node represents nearly equal area, so the
+unweighted nodal mean within a layer is already a faithful area-weighted
+spherical mean — no $\cos\phi$ weighting is needed at this stage.  The fields
+are carried through steps 2–4 unchanged, so the regularly gridded NetCDF
+output of step 4 inherits the same $\delta\ln V$ values without any additional
+averaging logic.
 
 ---
 
@@ -143,8 +167,11 @@ harmonics horizontally and 21 splines vertically.  The filtering procedure is:
    nodes layer-by-layer.  The depth-layer mean is restored before the final
    output so that absolute velocities (not just anomalies) are preserved.
 
-The output VTU adds three fields alongside the original Vs: `Vs_S40RTS`,
-`Vs_S20RTS`, and `Vs_S12RTS`.
+The output VTU adds three filtered fields alongside the original Vs:
+`Vs_S40RTS`, `Vs_S20RTS`, and `Vs_S12RTS`, plus their linearised
+perturbations `dlnVs_S40RTS`, `dlnVs_S20RTS`, and `dlnVs_S12RTS`.  Each
+`dlnVs_*` is referenced to the depth-mean of its own filtered field,
+following the standard tomographic-anomaly convention.
 
 ---
 
@@ -186,7 +213,9 @@ The filtering steps are:
    result back to the simulation mesh nodes layer-by-layer, mirroring the
    forward IDW step on the same LLNL layer geometry.
 
-The output VTU adds `Vs_filtered` and `Vp_filtered`.
+The output VTU adds `Vs_filtered` and `Vp_filtered`, plus the linearised
+perturbations `dlnVs_filtered` and `dlnVp_filtered`, each referenced to the
+depth-mean of the filtered field itself.
 
 ---
 
@@ -206,7 +235,9 @@ These are what you load for making maps, radial profiles, and power spectra.
 
 The required Python packages are available through the Firedrake module on
 Gadi.  No additional installation is needed beyond what is already set up in
-the `xd2` project.
+the `xd2` project — the PBS scripts `module load firedrake/...` and prepend
+the project-shared `gdrift`, `srts`, `llnltofi`, and `ginterp` paths to
+`PYTHONPATH` for you.
 
 ### Setup
 
@@ -220,59 +251,73 @@ cd kat-conversion
 
 Replace `USERNAME` with your Gadi username throughout.
 
-### Step 1 - Convert to seismic velocities
+### How the scripts are parametrised
 
-Edit `01_convert.sh` and set:
-- `INPUT_PVTU` to the path of your simulation's `.pvtu` file
-- `OUTPUT_VTU` to where you want the converted output
+Every step is generic on a run identifier `NAME` (and, for staging, an
+`INPUT_TAR` path), passed via `qsub -v`.  Files for a given run all share
+the prefix `${NAME}_`, so multiple simulations coexist in the same working
+directory without collision.  The naming convention is:
 
-Then submit:
+| Step              | Reads                                                    | Writes                                      |
+|-------------------|----------------------------------------------------------|---------------------------------------------|
+| `00_stage.sh`     | `INPUT_TAR` (tarball of pvtu pieces)                     | `${NAME}_output/output/output_0.pvtu`       |
+| `01_convert.sh`   | `${NAME}_output/output/output_0.pvtu`                    | `${NAME}_converted.vtu`                     |
+| `02_srts_filter.sh` | `${NAME}_converted.vtu`                                | `${NAME}_converted_srts_filtered.vtu`       |
+| `03_tofi_filter.sh` | `${NAME}_converted.vtu`                                | `${NAME}_converted_tofi_filtered.vtu`       |
+| `04_interpolate.sh` | the three VTUs above                                   | `${NAME}_converted{,_srts,_tofi}_filtered.nc` |
 
-```bash
-qsub 01_convert.sh
-```
+`01_convert.sh` also accepts an `INPUT_PVTU=...` override if you want to
+point at a pvtu that wasn't placed by `00_stage.sh`.
 
-Wall time: ~2-4 h depending on mesh size.  Memory: 128 GB.
+### End-to-end submission
 
-### Step 2 - S-RTS filtering
-
-Edit `02_srts_filter.sh` and set `INPUT_VTU` to the output of step 1.
-
-```bash
-qsub 02_srts_filter.sh
-```
-
-The output is written automatically as `<stem>_srts_filtered.vtu` alongside
-the input.  Wall time: ~1 h.
-
-### Step 3 - LLNL filtering
-
-Edit `03_tofi_filter.sh` and set `INPUT_VTU` and `OUTPUT_VTU`.
+Pick a `NAME` and the source tarball, then submit the five jobs with PBS
+dependencies so they queue immediately and start in order as soon as each
+predecessor finishes.  `02_srts_filter.sh` and `03_tofi_filter.sh` both
+depend on `01_convert.sh` and run in parallel.
 
 ```bash
-qsub 03_tofi_filter.sh
+NAME=C39_3e22_MuT
+TAR=/g/data/xd2/sg8812/kat-conversion-archive/0Ma_C39_3e22_MuT_Output.tar.gz
+
+STAGE=$(qsub  -v NAME=$NAME,INPUT_TAR=$TAR                                 00_stage.sh)
+CONV=$(qsub   -v NAME=$NAME -W depend=afterok:$STAGE                       01_convert.sh)
+SRTS=$(qsub   -v NAME=$NAME -W depend=afterok:$CONV                        02_srts_filter.sh)
+TOFI=$(qsub   -v NAME=$NAME -W depend=afterok:$CONV                        03_tofi_filter.sh)
+INTERP=$(qsub -v NAME=$NAME -W depend=afterok:$SRTS:$TOFI                  04_interpolate.sh)
 ```
 
-Wall time: ~1-2 h.
+If the input has already been staged (i.e. `${NAME}_output/` exists), skip
+the `00_stage.sh` line and drop `-W depend=afterok:$STAGE` from the
+`01_convert.sh` line.
 
-### Step 4 - Interpolate to NetCDF
+### Resource budgets
 
-Edit `04_interpolate.sh` and set `WORK_DIR` to the directory containing the
-three VTU files.
-
-```bash
-qsub 04_interpolate.sh
-```
-
-Wall time: ~3-4 h.  The output NetCDF files are the primary data products for
-analysis.
+| Step | Queue   | ncpus | mem    | walltime |
+|------|---------|------:|-------:|---------:|
+| 00   | copyq   | 1     | 8 GB   | 4 h      |
+| 01   | normal  | 1     | 128 GB | 4 h      |
+| 02   | normal  | 1     | 64 GB  | 2 h      |
+| 03   | normal  | 1     | 64 GB  | 2 h      |
+| 04   | normal  | 1     | 128 GB | 4 h      |
 
 ### Checking job status
 
 ```bash
 qstat -u USERNAME          # all your jobs
-qcat <jobid>               # live output while running
+qcat -o <jobid>            # stdout of a completed job
+qstat -fx <jobid>          # full record incl. exit status
 ```
+
+### Tracking and archiving runs
+
+`RUNS.md` records each `NAME` together with its source tarball and any
+relevant notes (viscosity, rheology, model series).  Add a row whenever you
+launch a new run.  Once `04_interpolate.sh` for a given `NAME` finishes,
+copy the six `${NAME}_converted*` files (three `.vtu` plus three `.nc`)
+into `/g/data/xd2/sg8812/kat-conversion-archive/` as
+`kat_${NAME}_artefacts.tar.gz` from a `copyq` job so `/scratch` can be
+reclaimed.
 
 ---
 

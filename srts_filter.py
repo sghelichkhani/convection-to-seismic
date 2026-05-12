@@ -34,6 +34,8 @@ from scipy.spatial import cKDTree
 
 from srts import S12RTS, S20RTS, S40RTS, DepthParameterization, SphericalHarmonicExpansion
 
+from _layer_mean import dln_percent_by_layer
+
 RMAX       = 2.208    # non-dim outer radius
 D_KM       = 2891.0   # mantle depth in km
 LMAX       = 40
@@ -218,16 +220,35 @@ def main():
         vs_s20[mask] = mesh_20[i]
         vs_s12[mask] = mesh_12[i]
 
+    # ── 8b. Linearised seismological perturbation (per-field layer mean) ─────
+    # Each filtered field is referenced to its own depth-mean on the mesh,
+    # matching the convention used by convert_to_vs.py and tofi_filter.py and
+    # the way published S40/S20/S12 RTS anomaly maps are defined.  The
+    # alternative would be to reuse the pre-filter regular-grid `layer_means`
+    # already in scope; the two differ only by the small mean perturbation
+    # introduced by the backward IDW interpolation (typically ≪ anomaly
+    # amplitudes).  Using the shared helper keeps NaN handling and bucketing
+    # identical across the three scripts.
+    dlnvs_s40 = dln_percent_by_layer(vs_s40, depth_km)
+    dlnvs_s20 = dln_percent_by_layer(vs_s20, depth_km)
+    dlnvs_s12 = dln_percent_by_layer(vs_s12, depth_km)
+
     # ── 9. Write output ───────────────────────────────────────────────────────
     mesh.point_data["Vs_S40RTS"] = vs_s40
     mesh.point_data["Vs_S20RTS"] = vs_s20
     mesh.point_data["Vs_S12RTS"] = vs_s12
+    mesh.point_data["dlnVs_S40RTS"] = dlnvs_s40
+    mesh.point_data["dlnVs_S20RTS"] = dlnvs_s20
+    mesh.point_data["dlnVs_S12RTS"] = dlnvs_s12
     mesh.save(out_path)
 
     print(f"\nDone. Written to {out_path}")
-    print(f"  Vs_S40RTS: {vs_s40.min():.0f} – {vs_s40.max():.0f} m/s")
-    print(f"  Vs_S20RTS: {vs_s20.min():.0f} – {vs_s20.max():.0f} m/s")
-    print(f"  Vs_S12RTS: {vs_s12.min():.0f} – {vs_s12.max():.0f} m/s")
+    print(f"  Vs_S40RTS:    {vs_s40.min():.0f} – {vs_s40.max():.0f} m/s")
+    print(f"  Vs_S20RTS:    {vs_s20.min():.0f} – {vs_s20.max():.0f} m/s")
+    print(f"  Vs_S12RTS:    {vs_s12.min():.0f} – {vs_s12.max():.0f} m/s")
+    print(f"  dlnVs_S40RTS: {dlnvs_s40.min():+.2f} – {dlnvs_s40.max():+.2f} %")
+    print(f"  dlnVs_S20RTS: {dlnvs_s20.min():+.2f} – {dlnvs_s20.max():+.2f} %")
+    print(f"  dlnVs_S12RTS: {dlnvs_s12.min():+.2f} – {dlnvs_s12.max():+.2f} %")
 
 
 if __name__ == "__main__":

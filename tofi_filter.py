@@ -31,6 +31,8 @@ from llnltofi._constants import (
     R_EARTH_KM,
 )
 
+from _layer_mean import dln_percent_by_layer
+
 RMAX = 2.208
 D_KM = 2891.0
 
@@ -123,9 +125,17 @@ def main():
     print("Back-projection (layered): Vp LLNL -> mesh...")
     vp_filtered_mesh = project_from_grid(vp_filtered_llnl, sph_coords, model)
 
-    # -- 7. Write output -------------------------------------------------------
+    # -- 7. Linearised seismological perturbation -----------------------------
+    print("\nComputing dlnVs_filtered and dlnVp_filtered ...")
+    depth_km = (RMAX - np.linalg.norm(coords, axis=1)) * D_KM
+    dlnvs_filtered = dln_percent_by_layer(vs_filtered_mesh, depth_km)
+    dlnvp_filtered = dln_percent_by_layer(vp_filtered_mesh, depth_km)
+
+    # -- 8. Write output -------------------------------------------------------
     mesh.point_data["Vs_filtered"] = vs_filtered_mesh
     mesh.point_data["Vp_filtered"] = vp_filtered_mesh
+    mesh.point_data["dlnVs_filtered"] = dlnvs_filtered
+    mesh.point_data["dlnVp_filtered"] = dlnvp_filtered
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     print(f"\nWriting {output_path} ...")
@@ -136,6 +146,8 @@ def main():
     print(f"  Vs_f: {vs_filtered_mesh.min():.0f} - {vs_filtered_mesh.max():.0f} m/s")
     print(f"  Vp:   {vp.min():.0f} - {vp.max():.0f} m/s")
     print(f"  Vp_f: {vp_filtered_mesh.min():.0f} - {vp_filtered_mesh.max():.0f} m/s")
+    print(f"  dlnVs_filtered: {dlnvs_filtered.min():+.2f} - {dlnvs_filtered.max():+.2f} %")
+    print(f"  dlnVp_filtered: {dlnvp_filtered.min():+.2f} - {dlnvp_filtered.max():+.2f} %")
     print("Done.")
 
 

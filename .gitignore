@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.bak
+*.o[0-9]*
+*.e[0-9]*
+*.vtu
+*.pvtu
+*.nc
+*_output/
+*.tar.gz

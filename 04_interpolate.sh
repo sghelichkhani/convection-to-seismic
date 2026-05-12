@@ -9,22 +9,21 @@
 #PBS -l wd
 #PBS -j oe
 
-# Step 4: Interpolate the three VTU outputs onto a regular lon/lat/depth
-# grid and save as NetCDF.  These .nc files are what you load for plotting
-# and further analysis.
+# Step 4: interpolate VTU outputs onto a regular lon/lat/depth grid (NetCDF).
 #
-# Set WORK_DIR to the directory that holds your converted*.vtu files.
-
-WORK_DIR=/scratch/xd2/USERNAME
-PREFIX=converted
+# Pass via qsub -v:
+#   NAME  run identifier (required)
 
 set -euo pipefail
 
+: "${NAME:?must pass -v NAME=<run-id>}"
+
+WORK=/scratch/xd2/sg8812/kat-conversion
+PREFIX="${NAME}_converted"
+
 module use /g/data/fp50/modules
 module load firedrake/main-20260417
-# Prepend a local g-drift checkout if you need the SLB_24 pyroliteCFMASNaCr
-# dataset (not yet in the installed gdrift). Edit the path or drop the entry.
-export PYTHONPATH=/scratch/xd2/USERNAME/g-drift:/scratch/xd2/USERNAME/local/lib/python3.11/site-packages:/scratch/xd2/USERNAME/g-interp:${PYTHONPATH:-}
+export PYTHONPATH=/scratch/xd2/sg8812/g-drift:/scratch/xd2/sg8812/local/lib/python3.11/site-packages:/scratch/xd2/sg8812/g-interp:${PYTHONPATH:-}
 
 interp() {
     local vtu="$1"
@@ -38,8 +37,8 @@ interp() {
         --output "${nc}"
 }
 
-interp "${WORK_DIR}/${PREFIX}.vtu"                  "${WORK_DIR}/${PREFIX}.nc"
-interp "${WORK_DIR}/${PREFIX}_srts_filtered.vtu"    "${WORK_DIR}/${PREFIX}_srts_filtered.nc"
-interp "${WORK_DIR}/${PREFIX}_tofi_filtered.vtu"    "${WORK_DIR}/${PREFIX}_tofi_filtered.nc"
+interp "${WORK}/${PREFIX}.vtu"                  "${WORK}/${PREFIX}.nc"
+interp "${WORK}/${PREFIX}_srts_filtered.vtu"    "${WORK}/${PREFIX}_srts_filtered.nc"
+interp "${WORK}/${PREFIX}_tofi_filtered.vtu"    "${WORK}/${PREFIX}_tofi_filtered.nc"
 
 echo "[$(date)] All done."

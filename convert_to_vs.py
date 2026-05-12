@@ -17,6 +17,8 @@ import numpy as np
 import pyvista as pv
 import gdrift
 
+from _layer_mean import dln_percent_by_layer
+
 RMAX       = 2.208   # non-dim outer radius (surface)
 D_KM       = 2891.0  # mantle depth in km
 TS         = 300.0   # surface temperature (K)
@@ -123,10 +125,17 @@ def main():
     vs = corrected.temperature_to_vs(temp_c, depth_c)
     vp = corrected.temperature_to_vp(temp_c, depth_c)
 
+    print("Computing dlnVs and dlnVp ...")
+    depth_km = depth_m / 1e3
+    dlnvs = dln_percent_by_layer(vs, depth_km)
+    dlnvp = dln_percent_by_layer(vp, depth_km)
+
     out_mesh = pv.UnstructuredGrid(mesh.cells, mesh.celltypes, mesh.points)
     out_mesh.point_data["Temperature_K"] = t_kelvin
     out_mesh.point_data["Vs"] = vs
     out_mesh.point_data["Vp"] = vp
+    out_mesh.point_data["dlnVs"] = dlnvs
+    out_mesh.point_data["dlnVp"] = dlnvp
 
     print(f"Writing {output_vtu} ...")
     out_mesh.save(output_vtu)
@@ -137,6 +146,8 @@ def main():
     print(f"T range:     {t_kelvin.min():.0f} - {t_kelvin.max():.0f} K")
     print(f"Vs range:    {np.nanmin(vs):.0f} - {np.nanmax(vs):.0f} m/s")
     print(f"Vp range:    {np.nanmin(vp):.0f} - {np.nanmax(vp):.0f} m/s")
+    print(f"dlnVs range: {np.nanmin(dlnvs):+.2f} - {np.nanmax(dlnvs):+.2f} %")
+    print(f"dlnVp range: {np.nanmin(dlnvp):+.2f} - {np.nanmax(dlnvp):+.2f} %")
     print("Done.")
 
 

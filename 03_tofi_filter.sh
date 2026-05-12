@@ -9,24 +9,23 @@
 #PBS -l wd
 #PBS -j oe
 
-# Step 3: Apply the LLNL-G3D-JPS resolution matrix to Vs and Vp.
+# Step 3: LLNL-G3D-JPS resolution matrix.
 #
-# INPUT_VTU  - output of step 1 (converted.vtu)
-# OUTPUT_VTU - where to write the LLNL-filtered result
-
-INPUT_VTU=/scratch/xd2/USERNAME/converted.vtu
-OUTPUT_VTU=/scratch/xd2/USERNAME/converted_tofi_filtered.vtu
+# Pass via qsub -v:
+#   NAME  run identifier (required)
 
 set -euo pipefail
 
+: "${NAME:?must pass -v NAME=<run-id>}"
+
+WORK=/scratch/xd2/sg8812/kat-conversion
+INPUT_VTU="${WORK}/${NAME}_converted.vtu"
+OUTPUT_VTU="${WORK}/${NAME}_converted_tofi_filtered.vtu"
+
 module use /g/data/fp50/modules
 module load firedrake/main-20260417
-# Prepend a local g-drift checkout if you need the SLB_24 pyroliteCFMASNaCr
-# dataset (not yet in the installed gdrift). Edit the path or drop the entry.
-export PYTHONPATH=/scratch/xd2/USERNAME/g-drift:/scratch/xd2/USERNAME/local/lib/python3.11/site-packages:${PYTHONPATH:-}
+export PYTHONPATH=/scratch/xd2/sg8812/g-drift:/scratch/xd2/sg8812/local/lib/python3.11/site-packages:${PYTHONPATH:-}
 
-SCRIPTS_DIR="$(dirname "$(realpath "$0")")"
-
-echo "[$(date)] Starting LLNL tomographic filtering"
-python3 "${SCRIPTS_DIR}/tofi_filter.py" "${INPUT_VTU}" "${OUTPUT_VTU}"
+echo "[$(date)] LLNL filtering ${INPUT_VTU} -> ${OUTPUT_VTU}"
+python3 "${WORK}/tofi_filter.py" "${INPUT_VTU}" "${OUTPUT_VTU}"
 echo "[$(date)] Done."
