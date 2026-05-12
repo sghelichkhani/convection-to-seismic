@@ -36,23 +36,52 @@ instructions for running the jobs.
 
 ## Installation
 
-The three Python packages this pipeline depends on are listed in
-`requirements.txt`.  Install them into your environment with:
+The Python packages this pipeline depends on are listed in
+`requirements.txt`. The repository currently installs:
+
+- **srts** - PyPI package for S-RTS tomographic filtering
+- **gdrift** - <https://github.com/g-adopt/g-drift> - thermodynamic conversion tables and anelastic corrections
+- **llnltofi** - <https://github.com/g-adopt/llnltofi> - LLNL-G3D-JPS resolution matrix filtering
+- **ginterp** - <https://github.com/g-adopt/g-interp> - interpolation of VTU output onto regular grids
+
+For a general Python environment, install with:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-This pulls `srts` from PyPI and installs `gdrift` and `llnltofi` directly from
-their GitHub repositories:
+On Gadi, the recommended workflow is to install the package dependencies into a
+local `python-packages/` directory inside the repository rather than relying on
+a project-shared Python path. From the repository root, run:
 
-- **srts** - PyPI package for S-RTS tomographic filtering
-- **gdrift** - <https://github.com/g-adopt/g-drift> - thermodynamic conversion tables and anelastic corrections
-- **llnltofi** - <https://github.com/g-adopt/llnltofi> - LLNL-G3D-JPS resolution matrix filtering
+```bash
+module use /g/data/fp50/modules
+module load firedrake/2026.4.0
 
-On Gadi the packages are already installed under the `xd2` project's shared
-Python path, so you do not need to re-install them - just load the module and
-run the PBS scripts as described in the usage section below.
+mkdir -p python-packages
+
+python3 -m pip install --no-cache-dir --target ./python-packages -r requirements.txt
+
+export PYTHONPATH=$PWD/python-packages:${PYTHONPATH:-}
+```
+
+The stage scripts source `pipeline_env.sh`, which loads the Firedrake module and
+prepends this local `python-packages/` directory to `PYTHONPATH`.
+
+Some of the required packages lazily download external datasets the first time
+they are used. Because compute jobs on Gadi may not be able to fetch those
+datasets directly, prefetch them once on the login node after installation:
+
+```bash
+module use /g/data/fp50/modules
+module load firedrake/2026.4.0
+
+export PYTHONPATH=$PWD/python-packages:${PYTHONPATH:-}
+
+python3 prefetch_all_data.py
+```
+
+This prefetches the external data needed by `gdrift`, `srts`, and `llnltofi`.
 
 ---
 
@@ -231,13 +260,23 @@ These are what you load for making maps, radial profiles, and power spectra.
 
 ## Running the pipeline on Gadi
 
-### Prerequisites
+### What runs where
 
-The required Python packages are available through the Firedrake module on
-Gadi.  No additional installation is needed beyond what is already set up in
-the `xd2` project — the PBS scripts `module load firedrake/...` and prepend
-the project-shared `gdrift`, `srts`, `llnltofi`, and `ginterp` paths to
-`PYTHONPATH` for you.
+There are two parts to the workflow:
+
+1. **Login/head node preparation**
+   - install the Python dependencies into a local `python-packages/` directory;
+   - prefetch the external datasets required by `gdrift`, `srts`, and `llnltofi`.
+
+2. **PBS batch stages**
+   - `00_stage.sh`
+   - `01_convert.sh`
+   - `02_srts_filter.sh`
+   - `03_tofi_filter.sh`
+   - `04_interpolate.sh`
+
+The helper script `submit_all.sh` is run on the login node and submits the PBS
+jobs with dependencies so they execute in the correct order.
 
 ### Setup
 
@@ -245,79 +284,148 @@ Clone this repository somewhere under your scratch space:
 
 ```bash
 cd /scratch/xd2/USERNAME
-git clone <repo-url> kat-conversion
-cd kat-conversion
+git clone <repo-url> convection-to-seismic
+cd convection-to-seismic
 ```
 
 Replace `USERNAME` with your Gadi username throughout.
 
+### Local dependency installation on Gadi
+
+From the repository root, run:
+
+```bash
+module use /g/data/fp50/modules
+module load firedrake/2026.4.0
+
+mkdir -p python-packages
+
+python3 -m pip install --no-cache-dir --target ./python-packages -r requirements.txt
+
+export PYTHONPATH=$PWD/python-packages:${PYTHONPATH:-}
+```
+
+### Prefetch external datasets
+
+Before launching the batch pipeline for the first time in a fresh local
+installation, prefetch the external datasets on the login node:
+
+```bash
+module use /g/data/fp50/modules
+module load firedrake/2026.4.0
+
+export PYTHONPATH=$PWD/python-packages:${PYTHONPATH:-}
+
+python3 prefetch_all_data.py
+```
+
+This only needs to be done once per fresh `python-packages/` installation.
+
 ### How the scripts are parametrised
 
 Every step is generic on a run identifier `NAME` (and, for staging, an
-`INPUT_TAR` path), passed via `qsub -v`.  Files for a given run all share
+`INPUT_TAR` path), passed via `qsub -v`. Files for a given run all share
 the prefix `${NAME}_`, so multiple simulations coexist in the same working
-directory without collision.  The naming convention is:
+directory without collision. The naming convention is:
 
-| Step              | Reads                                                    | Writes                                      |
-|-------------------|----------------------------------------------------------|---------------------------------------------|
-| `00_stage.sh`     | `INPUT_TAR` (tarball of pvtu pieces)                     | `${NAME}_output/output/output_0.pvtu`       |
-| `01_convert.sh`   | `${NAME}_output/output/output_0.pvtu`                    | `${NAME}_converted.vtu`                     |
-| `02_srts_filter.sh` | `${NAME}_converted.vtu`                                | `${NAME}_converted_srts_filtered.vtu`       |
-| `03_tofi_filter.sh` | `${NAME}_converted.vtu`                                | `${NAME}_converted_tofi_filtered.vtu`       |
-| `04_interpolate.sh` | the three VTUs above                                   | `${NAME}_converted{,_srts,_tofi}_filtered.nc` |
+| Step | Reads | Writes |
+|---|---|---|
+| `00_stage.sh` | `INPUT_TAR` (tarball of pvtu pieces) | `${NAME}_output/output/output_0.pvtu` |
+| `01_convert.sh` | `${NAME}_output/output/output_0.pvtu` | `${NAME}_converted.vtu` |
+| `02_srts_filter.sh` | `${NAME}_converted.vtu` | `${NAME}_converted_srts_filtered.vtu` |
+| `03_tofi_filter.sh` | `${NAME}_converted.vtu` | `${NAME}_converted_tofi_filtered.vtu` |
+| `04_interpolate.sh` | the three VTUs above | `${NAME}_converted.nc`, `${NAME}_converted_srts_filtered.nc`, `${NAME}_converted_tofi_filtered.nc` |
 
 `01_convert.sh` also accepts an `INPUT_PVTU=...` override if you want to
-point at a pvtu that wasn't placed by `00_stage.sh`.
+point at a pvtu that was not placed by `00_stage.sh`.
 
-### End-to-end submission
+### Recommended: submit the whole chain with one command
 
-Pick a `NAME` and the source tarball, then submit the five jobs with PBS
-dependencies so they queue immediately and start in order as soon as each
-predecessor finishes.  `02_srts_filter.sh` and `03_tofi_filter.sh` both
-depend on `01_convert.sh` and run in parallel.
+The easiest way to run the full workflow is via `submit_all.sh` from the login
+node:
 
 ```bash
-NAME=C39_3e22_MuT
-TAR=/g/data/xd2/sg8812/kat-conversion-archive/0Ma_C39_3e22_MuT_Output.tar.gz
-
-STAGE=$(qsub  -v NAME=$NAME,INPUT_TAR=$TAR                                 00_stage.sh)
-CONV=$(qsub   -v NAME=$NAME -W depend=afterok:$STAGE                       01_convert.sh)
-SRTS=$(qsub   -v NAME=$NAME -W depend=afterok:$CONV                        02_srts_filter.sh)
-TOFI=$(qsub   -v NAME=$NAME -W depend=afterok:$CONV                        03_tofi_filter.sh)
-INTERP=$(qsub -v NAME=$NAME -W depend=afterok:$SRTS:$TOFI                  04_interpolate.sh)
+chmod +x submit_all.sh
+./submit_all.sh Cratons_M2_0Ma /scratch/xd2/rad552/FIREDRAKE_Simulations/GPlates/Cratons_M2/All_Output/Cratons_M2_0Ma.tar.gz
 ```
 
-If the input has already been staged (i.e. `${NAME}_output/` exists), skip
-the `00_stage.sh` line and drop `-W depend=afterok:$STAGE` from the
-`01_convert.sh` line.
+This submits:
+
+- `00_stage.sh`
+- `01_convert.sh`
+- `02_srts_filter.sh`
+- `03_tofi_filter.sh`
+- `04_interpolate.sh`
+
+with PBS dependencies so that:
+
+- `01` waits for `00`;
+- `02` and `03` both wait for `01` and then run in parallel;
+- `04` waits for both `02` and `03`.
+
+### Manual submission
+
+If you want to submit the jobs manually, the commands are:
+
+```bash
+qsub -v NAME=Cratons_M2_0Ma,INPUT_TAR=/scratch/xd2/rad552/FIREDRAKE_Simulations/GPlates/Cratons_M2/All_Output/Cratons_M2_0Ma.tar.gz 00_stage.sh
+qsub -v NAME=Cratons_M2_0Ma 01_convert.sh
+qsub -v NAME=Cratons_M2_0Ma 02_srts_filter.sh
+qsub -v NAME=Cratons_M2_0Ma 03_tofi_filter.sh
+qsub -v NAME=Cratons_M2_0Ma 04_interpolate.sh
+```
+
+If you want to wire the dependency chain manually with PBS:
+
+```bash
+NAME=Cratons_M2_0Ma
+TAR=/scratch/xd2/rad552/FIREDRAKE_Simulations/GPlates/Cratons_M2/All_Output/Cratons_M2_0Ma.tar.gz
+
+STAGE=$(qsub  -v NAME=$NAME,INPUT_TAR=$TAR                00_stage.sh)
+CONV=$(qsub   -v NAME=$NAME -W depend=afterok:$STAGE      01_convert.sh)
+SRTS=$(qsub   -v NAME=$NAME -W depend=afterok:$CONV       02_srts_filter.sh)
+TOFI=$(qsub   -v NAME=$NAME -W depend=afterok:$CONV       03_tofi_filter.sh)
+INTERP=$(qsub -v NAME=$NAME -W depend=afterok:$SRTS:$TOFI 04_interpolate.sh)
+```
+
+### Important note on PBS storage and modules
+
+The stage scripts load Firedrake via:
+
+```bash
+module use /g/data/fp50/modules
+module load firedrake/2026.4.0
+```
+
+Any PBS script that uses these lines must request access to `gdata/fp50` in its
+`#PBS -l storage=...` line as well as the relevant `xd2` storage it reads or
+writes.
 
 ### Resource budgets
 
-| Step | Queue   | ncpus | mem    | walltime |
-|------|---------|------:|-------:|---------:|
-| 00   | copyq   | 1     | 8 GB   | 4 h      |
-| 01   | normal  | 1     | 128 GB | 4 h      |
-| 02   | normal  | 1     | 64 GB  | 2 h      |
-| 03   | normal  | 1     | 64 GB  | 2 h      |
-| 04   | normal  | 1     | 128 GB | 4 h      |
+| Step | Queue | ncpus | mem | walltime |
+|------|-------|------:|----:|---------:|
+| 00 | copyq | 1 | 8 GB | 4 h |
+| 01 | normal | 1 | 128 GB | 4 h |
+| 02 | normal | 1 | 64 GB | 2 h |
+| 03 | normal | 1 | 64 GB | 2 h |
+| 04 | normal | 1 | 128 GB | 4 h |
 
 ### Checking job status
 
 ```bash
-qstat -u USERNAME          # all your jobs
-qcat -o <jobid>            # stdout of a completed job
-qstat -fx <jobid>          # full record incl. exit status
+qstat -u USERNAME
+qcat -o <jobid>
+qstat -fx <jobid>
 ```
 
 ### Tracking and archiving runs
 
 `RUNS.md` records each `NAME` together with its source tarball and any
-relevant notes (viscosity, rheology, model series).  Add a row whenever you
-launch a new run.  Once `04_interpolate.sh` for a given `NAME` finishes,
-copy the six `${NAME}_converted*` files (three `.vtu` plus three `.nc`)
-into `/g/data/xd2/sg8812/kat-conversion-archive/` as
-`kat_${NAME}_artefacts.tar.gz` from a `copyq` job so `/scratch` can be
-reclaimed.
+relevant notes. Add a row whenever you launch a new run. Once
+`04_interpolate.sh` for a given `NAME` finishes, archive the six
+`${NAME}_converted*` files (three `.vtu` plus three `.nc`) as appropriate so
+the run can later be cleaned from `/scratch`.
 
 ---
 

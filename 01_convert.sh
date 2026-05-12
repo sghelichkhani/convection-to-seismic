@@ -5,30 +5,27 @@
 #PBS -l walltime=04:00:00
 #PBS -l ncpus=1
 #PBS -l mem=128GB
-#PBS -l storage=scratch/xd2+gdata/fp50
+#PBS -l storage=scratch/xd2+gdata/xd2+gdata/fp50
 #PBS -l wd
 #PBS -j oe
-
-# Step 1: Convert mantle convection output (pvtu) to seismic velocities.
-#
-# Pass via qsub -v:
-#   NAME        run identifier (required)
-#   INPUT_PVTU  optional override; defaults to ${WORK}/${NAME}_output/output/output_0.pvtu
-#
-# Output: ${WORK}/${NAME}_converted.vtu
 
 set -euo pipefail
 
 : "${NAME:?must pass -v NAME=<run-id>}"
 
-WORK=/scratch/xd2/sg8812/kat-conversion
+source /scratch/xd2/rad552/FIREDRAKE_Simulations/GPlates/Cratons_M2/Seismic_Conversion/convection-to-seismic/pipeline_env.sh
+
 INPUT_PVTU="${INPUT_PVTU:-${WORK}/${NAME}_output/output/output_0.pvtu}"
 OUTPUT_VTU="${WORK}/${NAME}_converted.vtu"
 
-module use /g/data/fp50/modules
-module load firedrake/main-20260417
-export PYTHONPATH=/scratch/xd2/sg8812/g-drift:/scratch/xd2/sg8812/local/lib/python3.11/site-packages:${PYTHONPATH:-}
+[[ -f "${INPUT_PVTU}" ]] || { echo "ERROR: input pvtu not found: ${INPUT_PVTU}" >&2; exit 2; }
 
-echo "[$(date)] Converting ${INPUT_PVTU} -> ${OUTPUT_VTU}"
+echo "[$(date)] Convert step starting for ${NAME}"
+echo "[$(date)] Input : ${INPUT_PVTU}"
+echo "[$(date)] Output: ${OUTPUT_VTU}"
+
 python3 "${WORK}/convert_to_vs.py" "${INPUT_PVTU}" "${OUTPUT_VTU}"
-echo "[$(date)] Done."
+
+[[ -f "${OUTPUT_VTU}" ]] || { echo "ERROR: expected output not created: ${OUTPUT_VTU}" >&2; exit 2; }
+
+echo "[$(date)] Convert step complete."
