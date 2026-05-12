@@ -30,5 +30,5 @@ module load firedrake/main-20260417
 export PYTHONPATH=/scratch/xd2/sg8812/g-drift:/scratch/xd2/sg8812/local/lib/python3.11/site-packages:${PYTHONPATH:-}
 
 echo "[$(date)] Converting ${INPUT_PVTU} -> ${OUTPUT_VTU}"
-python3 "${WORK}/convert_to_vs.py" "${INPUT_PVTU}" "${OUTPUT_VTU}"
+python3 "${WORK}/convert_to_v.py" "${INPUT_PVTU}" "${OUTPUT_VTU}"
 echo "[$(date)] Done."
