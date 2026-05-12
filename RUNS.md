@@ -33,5 +33,15 @@ qsub -v NAME=C39_3e22_MuT -W depend=afterok:$SRTS:$TOFI 04_interpolate.sh
 
 ## Archive
 
-Old C41 artefacts (pre-dlnVs/dlnVp) are kept at
-`/g/data/xd2/sg8812/kat-conversion-archive/kat_C41_artefacts.tar.gz`.
+Once a run has finished step 4, `archive.sh` tars its six artefacts
+(`*.vtu` and `*.nc`) into `/g/data/xd2/sg8812/kat-conversion-archive/` as
+`kat_${NAME}_artefacts_dlnV.tar.gz`.  The `_dlnV` suffix distinguishes the
+current outputs (with dlnVs/dlnVp throughout) from the older `kat_*` legacy
+tarballs that only contain absolute velocities.
+
+```bash
+qsub -v NAME=C39_3e22_MuT archive.sh
+```
+
+`README.md` in the archive directory documents the full layout and naming
+convention.
