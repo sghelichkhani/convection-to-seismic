@@ -39,6 +39,7 @@ D_KM = 2891.0
 
 # -- coordinate helpers --------------------------------------------------------
 
+
 def nondim_to_spherical(coords):
     """Non-dimensional Cartesian -> (gc_lat_deg, lon_deg, radius_km).
 
@@ -55,15 +56,18 @@ def nondim_to_spherical(coords):
 
 # -- filtering helpers ---------------------------------------------------------
 
+
 def layer_mean_1d(slowness):
     """Depth-dependent 1D reference from layer-wise mean slowness."""
     n_um_tz = N_LAYERS_UM_TZ * N_POINTS_UM_TZ
     s_um = slowness[:n_um_tz].reshape(N_LAYERS_UM_TZ, N_POINTS_UM_TZ)
     s_lm = slowness[n_um_tz:].reshape(N_LAYERS_LM, N_POINTS_LM)
-    return np.concatenate([
-        np.repeat(s_um.mean(axis=1), N_POINTS_UM_TZ),
-        np.repeat(s_lm.mean(axis=1), N_POINTS_LM),
-    ])
+    return np.concatenate(
+        [
+            np.repeat(s_um.mean(axis=1), N_POINTS_UM_TZ),
+            np.repeat(s_lm.mean(axis=1), N_POINTS_LM),
+        ]
+    )
 
 
 def apply_filter(velocity_on_llnl, model):
@@ -81,6 +85,7 @@ def apply_filter(velocity_on_llnl, model):
 
 # -- main ----------------------------------------------------------------------
 
+
 def main():
     if len(sys.argv) < 3:
         print(f"Usage: {sys.argv[0]} <input.vtu> <output.vtu>")
@@ -92,7 +97,7 @@ def main():
     # -- 1. Load LLNL model ---------------------------------------------------
     print("Loading LLNL resolution model...")
     model = llnltofi.ResolutionModel()
-    _ = model.R                              # ensure R.npz is present
+    _ = model.R  # ensure R.npz is present
     print(f"  {model.n_model:,} grid points, {model.n_layers} layers")
 
     # -- 2. Load simulation mesh -----------------------------------------------
@@ -115,27 +120,27 @@ def main():
 
     # -- 5. Apply resolution filter --------------------------------------------
     print("\nFiltering Vs through resolution matrix...")
-    vs_filtered_llnl = apply_filter(vs_on_llnl, model)
+    vs_llnl_tofi = apply_filter(vs_on_llnl, model)
     print("Filtering Vp through resolution matrix...")
-    vp_filtered_llnl = apply_filter(vp_on_llnl, model)
+    vp_llnl_tofi = apply_filter(vp_on_llnl, model)
 
     # -- 6. Layered back-projection: LLNL grid -> mesh -------------------------
     print("\nBack-projection (layered): Vs LLNL -> mesh...")
-    vs_filtered_mesh = project_from_grid(vs_filtered_llnl, sph_coords, model)
+    vs_tofi_mesh = project_from_grid(vs_llnl_tofi, sph_coords, model)
     print("Back-projection (layered): Vp LLNL -> mesh...")
-    vp_filtered_mesh = project_from_grid(vp_filtered_llnl, sph_coords, model)
+    vp_tofi_mesh = project_from_grid(vp_llnl_tofi, sph_coords, model)
 
     # -- 7. Linearised seismological perturbation -----------------------------
-    print("\nComputing dlnVs_filtered and dlnVp_filtered ...")
+    print("\nComputing dlnVs_tofi and dlnVp_tofi ...")
     depth_km = (RMAX - np.linalg.norm(coords, axis=1)) * D_KM
-    dlnvs_filtered = dln_percent_by_layer(vs_filtered_mesh, depth_km)
-    dlnvp_filtered = dln_percent_by_layer(vp_filtered_mesh, depth_km)
+    dlnvs_tofi = dln_percent_by_layer(vs_tofi_mesh, depth_km)
+    dlnvp_tofi = dln_percent_by_layer(vp_tofi_mesh, depth_km)
 
     # -- 8. Write output -------------------------------------------------------
-    mesh.point_data["Vs_filtered"] = vs_filtered_mesh
-    mesh.point_data["Vp_filtered"] = vp_filtered_mesh
-    mesh.point_data["dlnVs_filtered"] = dlnvs_filtered
-    mesh.point_data["dlnVp_filtered"] = dlnvp_filtered
+    mesh.point_data["Vs_tofi"] = vs_tofi_mesh
+    mesh.point_data["Vp_tofi"] = vp_tofi_mesh
+    mesh.point_data["dlnVs_tofi"] = dlnvs_tofi
+    mesh.point_data["dlnVp_tofi"] = dlnvp_tofi
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     print(f"\nWriting {output_path} ...")
@@ -143,11 +148,11 @@ def main():
 
     print("\n--- Summary ---")
     print(f"  Vs:   {vs.min():.0f} - {vs.max():.0f} m/s")
-    print(f"  Vs_f: {vs_filtered_mesh.min():.0f} - {vs_filtered_mesh.max():.0f} m/s")
+    print(f"  Vs_tofi: {vs_tofi_mesh.min():.0f} - {vs_tofi_mesh.max():.0f} m/s")
     print(f"  Vp:   {vp.min():.0f} - {vp.max():.0f} m/s")
-    print(f"  Vp_f: {vp_filtered_mesh.min():.0f} - {vp_filtered_mesh.max():.0f} m/s")
-    print(f"  dlnVs_filtered: {dlnvs_filtered.min():+.2f} - {dlnvs_filtered.max():+.2f} %")
-    print(f"  dlnVp_filtered: {dlnvp_filtered.min():+.2f} - {dlnvp_filtered.max():+.2f} %")
+    print(f"  Vp_tofi: {vp_tofi_mesh.min():.0f} - {vp_tofi_mesh.max():.0f} m/s")
+    print(f"  dlnVs_tofi: {dlnvs_tofi.min():+.2f} - {dlnvs_tofi.max():+.2f} %")
+    print(f"  dlnVp_tofi: {dlnvp_tofi.min():+.2f} - {dlnvp_tofi.max():+.2f} %")
     print("Done.")
 
 
