@@ -342,7 +342,8 @@ point at a pvtu that was not placed by `00_stage.sh`.
 ### Recommended: submit the whole chain with one command
 
 The easiest way to run the full workflow is via `submit_all.sh` from the login
-node:
+node. The first argument is the run name, i.e. the value passed to PBS as
+`NAME`; the second argument is the path to the input tarball:
 
 ```bash
 chmod +x submit_all.sh

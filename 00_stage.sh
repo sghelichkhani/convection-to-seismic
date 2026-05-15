@@ -14,7 +14,7 @@ set -euo pipefail
 : "${NAME:?must pass -v NAME=<run-id>}"
 : "${INPUT_TAR:?must pass -v INPUT_TAR=<path/to/tarball>}"
 
-source /scratch/xd2/rad552/FIREDRAKE_Simulations/GPlates/Cratons_M2/Seismic_Conversion/convection-to-seismic/pipeline_env.sh
+source ./pipeline_env.sh
 
 UNTAR_DIR="${WORK}/${NAME}_output"
 PVTU="${UNTAR_DIR}/output/output_0.pvtu"

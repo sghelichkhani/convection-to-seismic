@@ -13,7 +13,7 @@ set -euo pipefail
 
 : "${NAME:?must pass -v NAME=<run-id>}"
 
-source /scratch/xd2/rad552/FIREDRAKE_Simulations/GPlates/Cratons_M2/Seismic_Conversion/convection-to-seismic/pipeline_env.sh
+source ./pipeline_env.sh
 
 INPUT_PVTU="${INPUT_PVTU:-${WORK}/${NAME}_output/output/output_0.pvtu}"
 OUTPUT_VTU="${WORK}/${NAME}_converted.vtu"
